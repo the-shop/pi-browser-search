@@ -1,0 +1,11 @@
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+const r = await fetch("https://www.google.com/search?q=headless+chrome+test&num=20", { headers: { "user-agent": UA, "accept-language":"en-US,en;q=0.9" }});
+const html = await r.text();
+console.log("status", r.status, "bytes", html.length);
+console.log("has <title>:", (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]);
+console.log("has 'data-ved':", (html.match(/data-ved/g)||[]).length);
+console.log("has 'sorry':", /sorry/i.test(html));
+console.log("has 'noscript':", /noscript/i.test(html));
+console.log("has 'g-recaptcha':", /g-recaptcha/i.test(html));
+console.log("--- first 900 chars of body-ish ---");
+console.log(html.slice(0, 900).replace(/\s+/g,' '));
