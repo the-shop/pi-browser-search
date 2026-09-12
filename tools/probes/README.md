@@ -35,3 +35,5 @@ Two methodology notes worth keeping:
 - **Cookie checks must read the live jar** (`Network.getCookies`), not the
   SQLite file. Chrome flushes lazily, so a file read reports an empty jar on a
   profile that demonstrably has cookies.
+
+| `probe-bing-trust.ts` | Is Bing's decoy SERP trust-dependent like Google's? (No — 0% relevant under every profile, including the real one.) |

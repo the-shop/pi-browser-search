@@ -15,8 +15,11 @@ returning a degraded mix as if it satisfied the request.
 | Engine | Spec share | Measured state |
 | --- | --- | --- |
 | DuckDuckGo | 20% | ✅ working — 10 relevant results per query |
-| Google | 70% | ❌ blocked — needs a trusted `NID`+`SOCS` cookie pair |
-| Bing | 10% | ❌ decoy SERP — returns 10 well-formed, unrelated results |
+| Google | 70% | ⚠️ blocked without a trusted `NID`+`SOCS` pair; works with one (verified 12/12) |
+| Bing | 10% | ❌ decoy SERP — 0% relevant under every profile tested, including the real one |
+
+The practical ceiling from this machine is therefore **Google 70 / DuckDuckGo 30**,
+with Bing's share redistributed — see "Engine findings".
 
 See "Engine findings" below.
 
@@ -90,6 +93,24 @@ lane cannot bootstrap itself; it needs a pre-aged pair.
 plausible titles and links — all unrelated to the query. Consistent across
 `mkt`/`setlang`/`ensearch`/`cc` variants, and stable over time, so it is a bot
 tarpit rather than a locale bug.
+
+  Tested against profile trust directly (`tools/probe-bing-trust.ts`), because
+  trust is what fixes Google:
+
+  | Profile | Hits | Relevant |
+  | --- | --- | --- |
+  | fresh | 10 | 0% |
+  | fresh + injected `NID`/`SOCS` | 10 | 0% |
+  | full real Chrome profile | 10 | 0% |
+
+  So Bing is **not** trust-dependent and the Google fix does not help it. A
+  "postgres index bloat" query returned Arabic news about a phone's green dot,
+  Italian Speedtest pages and Taiwanese gaming-forum threads. Extracted text
+  also arrives with characters stripped (`Speedtest` → `Speedte t`), which is
+  consistent with deliberate obfuscation rather than a parsing fault.
+
+  **Bing is therefore unusable from this machine**, and its 10% share should be
+  redistributed rather than silently reported as satisfied.
 
 **DuckDuckGo.** Reliable via the no-JS endpoints. Needs a UA without the
 `HeadlessChrome` token (or it returns a duck CAPTCHA); GET only, since POST
