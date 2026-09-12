@@ -1,0 +1,40 @@
+{
+  "name": "pi-browser-search",
+  "version": "0.1.0",
+  "description": "Headless-browser web search for pi: multi-engine fan-out (Google/DuckDuckGo/Bing), 70/20/10 weighted routing, cross-engine corroboration ranking, and browser-based page scraping — no API keys.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "web-search",
+    "headless-browser",
+    "cdp",
+    "scraping",
+    "google",
+    "duckduckgo",
+    "bing"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/the-shop/pi-browser-search.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "gate": "node --experimental-strip-types tools/gate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
