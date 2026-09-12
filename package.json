@@ -24,8 +24,11 @@
     "node": ">=22"
   },
   "scripts": {
+    "test": "node --experimental-strip-types tools/unit.ts && node --experimental-strip-types tools/registration.ts",
+    "test:e2e": "node --experimental-strip-types tools/e2e.ts",
     "gate": "node --experimental-strip-types tools/gate.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "setup:dev": "mkdir -p node_modules/@earendil-works && ln -sfn \"$PI_AGENT_DIR/npm/node_modules/typebox\" node_modules/typebox"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -36,5 +39,8 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "devDependencies": {
+    "typebox": "*"
   }
 }

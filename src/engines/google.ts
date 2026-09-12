@@ -32,12 +32,14 @@ export const google: EngineAdapter = {
 		params.set("q", buildQuery(probe));
 		params.set("num", String(MAX_PER_PAGE));
 		params.set("hl", "en");
-		// Web-only results; excludes the AI Mode / shopping-heavy default surface.
-		params.set("udm", "14");
 		if (offset > 0) params.set("start", String(offset));
 		const range = recencyRange(probe.recencyMonths);
 		if (range) params.set("tbs", range);
-		params.set("gbv", "1");
+		// Deliberately minimal. `udm=14` (web-only) and `gbv=1` (basic HTML) both
+		// looked attractive — they strip AI Overviews and heavy JS — but measured
+		// on a trusted profile they route to the consent interstitial and return no
+		// results at all. This parameter set is the shape verified to work (12/12
+		// sustained queries); Google's own surfaces are filtered during extraction.
 		return `https://www.google.com/search?${params.toString()}`;
 	},
 
@@ -125,12 +127,53 @@ export const google: EngineAdapter = {
 					if (!anchor || !anchor.href) continue;
 					const url = decodeRedirect(anchor.href);
 					if (!/^https?:\\/\\//i.test(url)) continue;
-					// Drop Google's own surfaces (AI Mode, knowledge panels, sitelinks).
-					if (/(^|\\.)google\\.(com|hr|[a-z]{2,3})\\//.test(url) || url.includes('google.com/search')) continue;
-					if (seen.has(url)) continue;
-					seen.add(url);
-
 					const block = h3.closest('div[data-hveid]') || h3.closest('div[data-snc]') || anchor.closest('div');
+					// Google wraps outbound links in an opaque, encrypted redirect
+					// (/goto?url=CAES...) whose payload is not decodable offline. The
+					// displayed <cite> host is then the only host information available
+					// until the redirect is followed, so capture it here: ranking and
+					// cross-engine deduplication both run before resolution and need a host.
+					// No regex here on purpose: this block is shipped to the page through a
+					// TypeScript template literal, where every backslash must be escaped for both
+					// TypeScript and the page-side parser. Plain string operations cannot be
+					// silently mangled by one missing escape level.
+					let isWrapper = false;
+					try {
+					  const wrapperPath = new URL(url).pathname;
+					  isWrapper = wrapperPath === "/goto" || wrapperPath === "/url";
+					} catch (e) { isWrapper = false; }
+					let displayHost = "";
+					if (isWrapper && block) {
+					  const cite = block.querySelector("cite");
+					  if (cite) {
+					    // Displayed as "https://host › path › ..." with the path truncated,
+					    // so only the host is trustworthy. Splitting rather than matching keeps
+					    // this free of escapes.
+					    const shown = (cite.textContent || "").trim();
+					    let host = (shown.split(" ")[0] || "").replace("https://", "").replace("http://", "");
+					    host = host.split("/")[0].split("›")[0];
+					    if (host && host.indexOf(".") !== -1) displayHost = host.toLowerCase();
+					  }
+					}
+					// Google's own surfaces (AI Mode, knowledge panels, sitelinks) are not
+					// results; wrapped outbound links are.
+					// Google's own surfaces (AI Mode, knowledge panels, sitelinks) are not
+					// results; wrapped outbound links are. Substring host comparison avoids
+					// another regex, for the same escaping reason as above.
+					if (!isWrapper) {
+					  let host = "";
+					  try { host = new URL(url).hostname; } catch (e) { host = ""; }
+					  if (host.indexOf("google.") !== -1) continue;
+					}
+					if (url.includes('google.com/search')) continue;
+					// A wrapper with no displayed host cannot be ranked or resolved usefully.
+					if (isWrapper && !displayHost) continue;
+					const title0 = (h3.innerText || '').trim();
+					// Wrapper hrefs are opaque per-impression, so identity must come from the
+					// displayed host plus the title rather than from the URL.
+					const identity = isWrapper ? 'wrapper:' + displayHost + ':' + title0.toLowerCase() : url;
+					if (seen.has(identity)) continue;
+					seen.add(identity);
 					let snippet = '';
 					if (block) {
 						const nodes = block.querySelectorAll(
@@ -146,11 +189,13 @@ export const google: EngineAdapter = {
 					if (snippet.startsWith(title)) snippet = snippet.slice(title.length).trim();
 					out.push({
 						title,
-						url,
+						url: isWrapper ? new URL(url, location.origin).href : url,
 						snippet: snippet.replace(/\\s+/g, ' ').trim().slice(0, 400),
 						position: 0,
 						engine: 'google',
 						probeId: ${JSON.stringify(probe.id)},
+						...(displayHost ? { displayHost } : {}),
+						...(isWrapper ? { unresolved: true } : {}),
 					});
 				}
 				return out;

@@ -40,6 +40,15 @@ export interface RawHit {
 	position: number;
 	engine: EngineId;
 	probeId: string;
+	/**
+	 * Host as displayed by the engine, when it differs from the URL's host.
+	 * Google wraps outbound links in an opaque encrypted redirect
+	 * (`/goto?url=CAES...`) that cannot be decoded offline, so the displayed
+	 * `<cite>` host is the only host information available before resolution.
+	 */
+	displayHost?: string;
+	/** True when `url` is an engine redirect wrapper rather than the destination. */
+	unresolved?: boolean;
 }
 
 export type EngineStatus = "ok" | "blocked" | "empty" | "error";
@@ -61,6 +70,15 @@ export interface ExtractContext {
 	limit: number;
 	/** Result offset, for page-2 deepening. */
 	offset: number;
+}
+
+/**
+ * Resolves engine redirect wrappers to their real destinations.
+ * Implemented on the browser because the wrappers are opaque and same-origin
+ * CORS blocks an in-page fetch.
+ */
+export interface RedirectResolver {
+	resolve(page: CdpSession, url: string): Promise<string | undefined>;
 }
 
 export interface EngineAdapter {

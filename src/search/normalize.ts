@@ -144,14 +144,37 @@ export interface NormalizedHit extends RawHit {
  * safe to render and to fetch directly. The raw engine-supplied URL is not
  * preserved: keeping both invited exactly the bug where tracking parameters
  * leaked into user-visible output while ranking used the clean form.
+ *
+ * Wrapped hits (`hit.unresolved`) are the exception. Their URL is an opaque
+ * engine redirect, so the displayed host stands in for identity until the
+ * redirect is followed after ranking. The wrapper URL is preserved so it can be
+ * resolved.
  */
 export function normalizeHits(hits: RawHit[]): NormalizedHit[] {
 	const out: NormalizedHit[] = [];
 	for (const hit of hits) {
-		const canonical = canonicalizeUrl(hit.url);
-		if (!canonical) continue;
 		const title = cleanText(hit.title);
 		if (title.length < 3) continue;
+
+		if (hit.unresolved && hit.displayHost) {
+			// Identity comes from the displayed host plus the title: the wrapper URL
+			// is per-impression and cannot be used as a key.
+			const displayHost = hit.displayHost.toLowerCase();
+			out.push({
+				...hit,
+				title,
+				snippet: cleanText(hit.snippet),
+				canonical: {
+					key: `${displayHost}/${title.toLowerCase()}`,
+					url: hit.url,
+					host: displayHost,
+				},
+			});
+			continue;
+		}
+
+		const canonical = canonicalizeUrl(hit.url);
+		if (!canonical) continue;
 		out.push({
 			...hit,
 			title,

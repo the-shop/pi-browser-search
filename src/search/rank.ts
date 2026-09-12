@@ -254,3 +254,41 @@ export function rankHits(
 	}
 	return selected;
 }
+
+/**
+ * Merge results that resolved to the same final URL.
+ *
+ * Ranking runs before redirect resolution, so a wrapped Google hit and a
+ * DuckDuckGo hit for the same page look like different results at that point:
+ * the wrapper is identified by its displayed host plus title, while DuckDuckGo
+ * supplies a real URL. Once both are resolved to the same destination their
+ * evidence has to be combined — otherwise the single strongest signal available
+ * (independent engines agreeing) is silently lost for whichever engine happens
+ * to wrap its links.
+ */
+export function mergeResolved(ranked: RankedHit[]): RankedHit[] {
+	const byUrl = new Map<string, RankedHit>();
+	for (const hit of ranked) {
+		const existing = byUrl.get(hit.url);
+		if (!existing) {
+			byUrl.set(hit.url, hit);
+			continue;
+		}
+		const engines = [...new Set([...existing.engines, ...hit.engines])];
+		const strategies = [...new Set([...existing.strategies, ...hit.strategies])];
+		const base = hit.score > existing.score ? hit : existing;
+		const gainedAgreement = engines.length > Math.max(existing.engines.length, hit.engines.length);
+		byUrl.set(hit.url, {
+			...base,
+			engines,
+			strategies,
+			corroborated: engines.length >= 2,
+			// Re-derive the score from merged evidence; the corroboration term is
+			// worth what it is worth in the original scoring, not less.
+			score: base.score + (gainedAgreement ? 3.0 : 0),
+			bestPosition: Math.min(existing.bestPosition, hit.bestPosition),
+			occurrences: [...existing.occurrences, ...hit.occurrences],
+		});
+	}
+	return [...byUrl.values()].sort((a, b) => b.score - a.score || a.url.localeCompare(b.url));
+}
