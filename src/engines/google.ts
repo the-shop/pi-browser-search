@@ -176,10 +176,16 @@ export const google: EngineAdapter = {
 					seen.add(identity);
 					let snippet = '';
 					if (block) {
+						// Pick the single longest matching node rather than concatenating all
+						// of them: the selectors overlap, so joining yielded the same prose
+						// two or three times over.
 						const nodes = block.querySelectorAll(
 							'div[data-sncf], div.VwiC3b, div[data-content-feature], span.aCOpRe, div.lEBKkf, div[data-sncf="1"]'
 						);
-						snippet = Array.from(nodes).map((n) => n.innerText || '').filter(Boolean).join(' ');
+						for (const node of Array.from(nodes)) {
+							const candidate = (node.innerText || '').trim();
+							if (candidate.length > snippet.length) snippet = candidate;
+						}
 					}
 					if (!snippet && block) {
 						snippet = (block.innerText || '').replace(/\\s+/g, ' ');
@@ -187,6 +193,13 @@ export const google: EngineAdapter = {
 					// Strip the title text that the block-level fallback duplicates.
 					const title = (h3.innerText || '').trim();
 					if (snippet.startsWith(title)) snippet = snippet.slice(title.length).trim();
+					// Trim engine chrome that is not part of the description.
+					snippet = snippet.replace(/\s*Read more\s*$/i, '').trim();
+					// Defensive: if a node still repeated itself, keep one copy.
+					const half = Math.floor(snippet.length / 2);
+					if (snippet.length > 80 && snippet.slice(0, half).trim() === snippet.slice(half).trim()) {
+						snippet = snippet.slice(0, half).trim();
+					}
 					out.push({
 						title,
 						url: isWrapper ? new URL(url, location.origin).href : url,
