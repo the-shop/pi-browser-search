@@ -10,6 +10,7 @@ import { contentWords, detectIntent, expandQuery } from "../src/search/expand.ts
 import { rankHits } from "../src/search/rank.ts";
 import { queryTerms, scoreHit } from "../src/search/relevance.ts";
 import { assessExtraction } from "../src/content/extract.ts";
+import { applyRelevanceGate } from "../src/search/relevance.ts";
 import type { RawHit } from "../src/engines/types.ts";
 
 const FAILURES: string[] = [];
@@ -216,6 +217,51 @@ console.log("=== extraction quality ===");
 	const prose = "".padEnd(0) +
 		"PostgreSQL index bloat happens when dead tuples accumulate and are not reclaimed by autovacuum quickly enough. ".repeat(6);
 	check("ordinary prose is not flagged", !assessExtraction(prose, 30_000).suspect);
+}
+
+console.log("=== decoy exoneration (regression) ===");
+{
+	// Real case: Bing returned carnival listings for a laptop query across every
+	// probe, yet was passed through as "bing 40/40 (100%)" because a single probe
+	// scored above the per-hit bar by coincidence. Condemning on aggregate
+	// precision removes that loophole.
+	const probe = { id: "p1", query: "MSI Katana 15 HX B14WGK-821XPL RTX 5070 cijena", label: "x" };
+	const decoy = (i: number): RawHit => ({
+		title: "Sobre este evento Trinidad Carnival Fiestas San Juaneras",
+		url: `https://decoy.example.com/${i}`,
+		snippet: "Trinidad Carnival is a traditional annual celebration",
+		position: i + 1, engine: "bing", probeId: "p1",
+	});
+	// 39 probes of pure decoy.
+	const outcomes = Array.from({ length: 39 }, (_, i) => ({
+		engine: "bing" as const, probeId: "p1", status: "ok" as const,
+		hits: Array.from({ length: 10 }, (_, j) => decoy(j)), elapsedMs: 10,
+	}));
+	// One probe whose decoys coincidentally share a couple of query tokens.
+	outcomes.push({
+		engine: "bing" as const, probeId: "p1", status: "ok" as const, elapsedMs: 10,
+		hits: Array.from({ length: 4 }, (_, j) => ({
+			title: `Katana 15 for sale ${j}`,
+			url: `https://sneaky.example.com/${j}`,
+			snippet: "HX 15 laptop", position: j + 1, engine: "bing" as const, probeId: "p1",
+		})),
+	});
+	const verdict = applyRelevanceGate(outcomes, [probe]);
+	check("engine decoying across probes is condemned", Boolean(verdict.suspectEngines.bing), verdict.suspectEngines.bing);
+	check("no decoy hits survive the gate", verdict.hits.length === 0, `${verdict.hits.length} survived`);
+
+	// A genuinely working engine must still survive: mostly-relevant output.
+	const good = Array.from({ length: 5 }, (_, i) => ({
+		engine: "duckduckgo" as const, probeId: "p1", status: "ok" as const, elapsedMs: 10,
+		hits: [{
+			title: "MSI Katana RTX 5070 laptop", url: `https://shop.example.com/${i}`,
+			snippet: "cijena za MSI Katana 15 HX RTX 5070", position: 1,
+			engine: "duckduckgo" as const, probeId: "p1",
+		}],
+	}));
+	const goodVerdict = applyRelevanceGate(good, [probe]);
+	check("a working engine is not condemned", !goodVerdict.suspectEngines.duckduckgo, goodVerdict.suspectEngines.duckduckgo);
+	check("working engine results survive", goodVerdict.hits.length === 5, `${goodVerdict.hits.length}`);
 }
 console.log(`\n=== ${FAILURES.length === 0 ? `UNIT PASSED (${checks} checks)` : `UNIT FAILED (${FAILURES.length}/${checks})`} ===`);
 for (const failure of FAILURES) console.log(`  - ${failure}`);

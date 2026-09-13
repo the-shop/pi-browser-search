@@ -148,15 +148,30 @@ export function applyRelevanceGate(
 			continue;
 		}
 
-		// An engine is only condemned as a decoy when every one of its successful
-		// outcomes looks like a decoy, so a single bad probe cannot kill a working engine.
+		// Condemn on the engine's AGGREGATE precision, not per-probe.
+		//
+		// This previously required *every* outcome to look suspect, on the
+		// reasoning that one bad probe should not kill a working engine. The
+		// reasoning was backwards in the case that matters: with 40 probes it
+		// takes a single probe whose decoy hits coincidentally share a few query
+		// terms to exonerate an engine that is decoying everywhere else. Measured
+		// exactly that — Bing returned carnival listings for a laptop query
+		// across 40/40 probes and was passed through as "bing 40/40 (100%)",
+		// because one probe scored above the per-hit bar by coincidence.
+		//
+		// Aggregate precision is the property we actually care about, and it has
+		// no such loophole: an engine that returns 400 hits of which almost none
+		// relate to the query is decoying, whatever any single probe looks like.
 		const engineAssessments = assessments.filter((a) => a.engine === engine && a.total > 0);
 		if (engineAssessments.length === 0) continue;
-		if (engineAssessments.every((a) => a.suspect)) {
-			const worst = engineAssessments.reduce((min, a) => (a.ratio < min.ratio ? a : min), engineAssessments[0]);
+		const totalHits = engineAssessments.reduce((sum, a) => sum + a.total, 0);
+		const totalRelevant = engineAssessments.reduce((sum, a) => sum + a.relevant, 0);
+		const precision = totalHits > 0 ? totalRelevant / totalHits : 0;
+		if (totalHits > 0 && precision < SUSPECT_RATIO) {
 			suspectEngines[engine] =
 				`${engine} returned results unrelated to the query ` +
-				`(${worst.relevant}/${worst.total} relevant) — treating this engine as degraded`;
+				`(${totalRelevant}/${totalHits} relevant across ${engineAssessments.length} probe(s)) ` +
+				`— treating this engine as degraded`;
 		}
 	}
 
