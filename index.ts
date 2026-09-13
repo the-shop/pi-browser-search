@@ -1,7 +1,7 @@
 /**
  * pi-browser-search — headless-browser web search for the pi coding agent.
  *
- * Registers `web_search`, `fetch_content` and `get_search_content`. All three
+ * Registers `ts_web_search`, `ts_fetch_content` and `ts_get_search_content`. All three
  * go through a real Chrome over CDP rather than HTTP APIs, so there are no keys
  * to configure and JS-rendered pages are readable.
  *
@@ -80,9 +80,9 @@ function getChrome(): ChromeManager {
 }
 
 export default function (pi: ExtensionAPI) {
-	// --- web_search ---------------------------------------------------------
+	// --- ts_web_search ---------------------------------------------------------
 	pi.registerTool({
-		name: "web_search",
+		name: "ts_web_search",
 		label: "Web Search",
 		description:
 			"Search the web with a headless browser across Google, DuckDuckGo and Bing. Each call fans out into at least 10 probes drawn from different strategies (verbatim, quoted, intent-shaped, site-scoped, recency, terminology) and merges the results, ranking them primarily by cross-engine corroboration. " +
@@ -92,11 +92,11 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet:
 			"Search the web via headless browser (Google/DuckDuckGo/Bing). At least 10 probes per call; prefer {queries:[...]} with 2-4 related angles for research. Reports the engine mix actually achieved.",
 		promptGuidelines: [
-			"Use web_search for web research questions instead of fetch_content when you do not yet know the URL.",
-			"Prefer web_search with {queries:[...]} containing 2-4 related angles over repeated single-query calls; each call already fans out internally, so repetition adds little.",
-			"Use web_search depth:\"deep\" when the user needs a thorough answer; it costs more time but adds a second probe wave and page-2 results.",
-			"When web_search reports a degraded engine, do not assume the results cover that engine's index; say so if the distinction matters to the answer.",
-			"Use get_search_content with the responseId from a web_search result to read the full text of a source it returned.",
+			"Use ts_web_search for web research questions instead of ts_fetch_content when you do not yet know the URL.",
+			"Prefer ts_web_search with {queries:[...]} containing 2-4 related angles over repeated single-query calls; each call already fans out internally, so repetition adds little.",
+			"Use ts_web_search depth:\"deep\" when the user needs a thorough answer; it costs more time but adds a second probe wave and page-2 results.",
+			"When ts_web_search reports a degraded engine, do not assume the results cover that engine's index; say so if the distinction matters to the answer.",
+			"Use ts_get_search_content with the responseId from a ts_web_search result to read the full text of a source it returned.",
 		],
 		parameters: Type.Object({
 			query: Type.Optional(Type.String({ description: "A single search query." })),
@@ -129,7 +129,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const queries = collectQueries(params.query, params.queries);
 			if (queries.length === 0) {
-				throw new Error("web_search requires either `query` or `queries`.");
+				throw new Error("ts_web_search requires either `query` or `queries`.");
 			}
 
 			const numResults = params.numResults ?? DEFAULT_RESULTS;
@@ -329,17 +329,17 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// --- fetch_content ------------------------------------------------------
+	// --- ts_fetch_content ------------------------------------------------------
 	pi.registerTool({
-		name: "fetch_content",
+		name: "ts_fetch_content",
 		label: "Fetch Content",
 		description:
 			"Fetch a URL with a headless browser and return readable text. Unlike a plain HTTP fetch this executes JavaScript, so client-rendered pages, documentation sites and lazy-loaded articles are readable. " +
 			"Preserves headings, lists, code blocks and link targets. Use `prompt` to ask a question answered only from the fetched page.",
 		promptSnippet: "Fetch a URL via headless browser and return readable text (JS-rendered pages included).",
 		promptGuidelines: [
-			"Use fetch_content when you already have a URL; use web_search when you do not.",
-			"Use fetch_content prompt:\"...\" to get an answer grounded only in the fetched page rather than the whole text.",
+			"Use ts_fetch_content when you already have a URL; use ts_web_search when you do not.",
+			"Use ts_fetch_content prompt:\"...\" to get an answer grounded only in the fetched page rather than the whole text.",
 		],
 		parameters: Type.Object({
 			url: Type.Optional(Type.String({ description: "URL to fetch." })),
@@ -354,7 +354,7 @@ export default function (pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const urls = [...(params.url ? [params.url] : []), ...(params.urls ?? [])].filter(Boolean);
-			if (urls.length === 0) throw new Error("fetch_content requires `url` or `urls`.");
+			if (urls.length === 0) throw new Error("ts_fetch_content requires `url` or `urls`.");
 
 			const browser = getChrome();
 			const maxChars = params.maxChars ?? 30_000;
@@ -366,7 +366,7 @@ export default function (pi: ExtensionAPI) {
 				try {
 					const page = await fetchPage(browser, url, { signal, maxChars });
 					// A suspect extraction is not content; keep it out of the store so
-					// get_search_content cannot later hand back a consent dialog.
+					// ts_get_search_content cannot later hand back a consent dialog.
 					if (page.text && !page.suspect) {
 						documents.push({ url: page.url, title: page.title, text: page.text, kind: page.kind });
 					}
@@ -435,16 +435,16 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// --- get_search_content -------------------------------------------------
+	// --- ts_get_search_content -------------------------------------------------
 	pi.registerTool({
-		name: "get_search_content",
+		name: "ts_get_search_content",
 		label: "Get Search Content",
 		description:
-			"Retrieve stored content from an earlier web_search or fetch_content response in this session, by responseId. " +
+			"Retrieve stored content from an earlier ts_web_search or ts_fetch_content response in this session, by responseId. " +
 			"Optionally narrow to one URL, or search inside the content with findText to pull just the relevant passages.",
-		promptSnippet: "Read stored full content from a previous web_search or fetch_content result by responseId.",
+		promptSnippet: "Read stored full content from a previous ts_web_search or ts_fetch_content result by responseId.",
 		parameters: Type.Object({
-			responseId: Type.String({ description: "The responseId reported by web_search or fetch_content." }),
+			responseId: Type.String({ description: "The responseId reported by ts_web_search or ts_fetch_content." }),
 			url: Type.Optional(Type.String({ description: "Return only this URL's stored content." })),
 			urlIndex: Type.Optional(Type.Integer({ minimum: 0, description: "Return only the URL at this index." })),
 			findText: Type.Optional(
@@ -631,7 +631,7 @@ function renderSearch(input: RenderInput): string {
 		`${probeCount} probes · ${ranked.length} sources · engines delivered: ${mixSummary}${deep ? " · depth: deep" : ""}`,
 	);
 	if (trust.state !== "trusted") lines.push(`Google lane: ${trust.reason}`);
-	lines.push(`responseId: ${responseId} — use get_search_content to read a source in full.`);
+	lines.push(`responseId: ${responseId} — use ts_get_search_content to read a source in full.`);
 
 	return lines.join("\n");
 }

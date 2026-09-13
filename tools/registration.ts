@@ -29,7 +29,7 @@ const mockApi = {
 await factory(mockApi as never);
 
 console.log("=== registration ===\n");
-for (const name of ["web_search", "fetch_content", "get_search_content"]) {
+for (const name of ["ts_web_search", "ts_fetch_content", "ts_get_search_content"]) {
 	const tool = tools.get(name);
 	check(`${name} registered`, Boolean(tool));
 	if (!tool) continue;
@@ -44,22 +44,22 @@ check("nothing registered at import time (lazy)", true);
 console.log("");
 
 console.log("=== schema shape ===\n");
-const webSearch = tools.get("web_search")!;
+const webSearch = tools.get("ts_web_search")!;
 const schema = JSON.stringify(webSearch.parameters);
 for (const field of ["query", "queries", "numResults", "depth", "recency", "sites", "includeContent"]) {
-	check(`web_search exposes ${field}`, schema.includes(`"${field}"`));
+	check(`ts_web_search exposes ${field}`, schema.includes(`"${field}"`));
 }
-const fetchSchema = JSON.stringify(tools.get("fetch_content")!.parameters);
+const fetchSchema = JSON.stringify(tools.get("ts_fetch_content")!.parameters);
 for (const field of ["url", "urls", "prompt", "maxChars"]) {
-	check(`fetch_content exposes ${field}`, fetchSchema.includes(`"${field}"`));
+	check(`ts_fetch_content exposes ${field}`, fetchSchema.includes(`"${field}"`));
 }
 console.log("");
 
 // String enums must use StringEnum for Google-model compatibility.
 console.log("=== prompt metadata ===\n");
-check("web_search has a promptSnippet", typeof webSearch.promptSnippet === "string");
+check("ts_web_search has a promptSnippet", typeof webSearch.promptSnippet === "string");
 const guidelines = (webSearch.promptGuidelines ?? []) as string[];
-check("web_search has promptGuidelines", guidelines.length > 0);
+check("ts_web_search has promptGuidelines", guidelines.length > 0);
 check(
 	"every guideline names its tool (no bare 'this tool')",
 	guidelines.every((line) => !/use this tool/i.test(line)),

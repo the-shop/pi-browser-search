@@ -1,8 +1,8 @@
 /**
  * Session-scoped content store.
  *
- * `web_search` and `fetch_content` return a compact summary plus a
- * `responseId`; the full text lives here so a follow-up `get_search_content`
+ * `ts_web_search` and `ts_fetch_content` return a compact summary plus a
+ * `responseId`; the full text lives here so a follow-up `ts_get_search_content`
  * can pull one source or grep for passages without the model paying for every
  * document up front.
  *
@@ -79,7 +79,7 @@ export function createArtifact(input: ArtifactInput): string {
 		queries: input.queries,
 		ranked: input.ranked,
 		// Documents gathered by enrichment, plus a snippet-only entry for every
-		// ranked result, so `get_search_content` can always return *something*
+		// ranked result, so `ts_get_search_content` can always return *something*
 		// for any URL the search reported.
 		documents: [
 			...(input.documents ?? []),

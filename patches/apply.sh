@@ -11,7 +11,9 @@ if grep -q 'LOCAL PATCH (pi-browser-search)' "$FILE"; then
   echo "already patched"
   exit 0
 fi
-cp "$FILE" "$FILE.orig-$(date +%Y%m%d-%H%M%S)"
+# Back up beside the package, not inside src/: a stray .ts next to the
+# original is a duplicate module a build or typecheck glob could pick up.
+cp "$FILE" "$TARGET/child-tool-plan.ts.orig-$(date +%Y%m%d-%H%M%S)"
 if patch -p0 --dry-run "$FILE" < "$PATCH" >/dev/null 2>&1; then
   patch -p0 "$FILE" < "$PATCH"
   echo "patched $FILE"

@@ -47,6 +47,8 @@ export interface RelevanceScore {
  * incidental boilerplate while the title/host reflect the actual target.
  */
 export function scoreHit(hit: RawHit, terms: string[]): RelevanceScore {
+	// Callers that aggregate across probes must skip unjudgeable probes first
+	// (see assessOutcome); this default is for direct calls only.
 	if (terms.length === 0) return { coverage: 1, relevant: true };
 	const title = hit.title.toLowerCase();
 	const host = safeHost(hit.url);
@@ -81,18 +83,30 @@ export interface EngineRelevance {
 	relevant: number;
 	/** Fraction of hits that cleared the bar. */
 	ratio: number;
-	/** True when the engine's output looks like a decoy SERP. */
-	suspect: boolean;
+
 }
 
 /** Below this fraction of relevant hits, an engine's output is treated as decoy. */
 const SUSPECT_RATIO = 0.34;
-/** Small result sets are judged leniently; one good hit out of two is not a decoy. */
+/**
+ * Minimum hits before a single outcome can be judged. Note this gates only the
+ * per-outcome assessment; the live gate condemns on *aggregate* precision
+ * (`SUSPECT_RATIO` below) and applies no small-sample leniency, deliberately:
+ * an engine that returns almost nothing relevant is decoying whether it did so
+ * in one probe or forty.
+ */
 const MIN_SAMPLE = 4;
 
 export function assessOutcome(outcome: EngineOutcome, probes: Map<string, Probe>): EngineRelevance {
 	const probe = probes.get(outcome.probeId);
 	const terms = queryTerms(probe?.query ?? "");
+	// A query made entirely of stop-words ("how do i do it") yields no terms, and
+	// relevance cannot be judged from it. Excluded from the aggregate rather than
+	// scored, because counting every hit as "relevant" would silently disable the
+	// gate for that probe.
+	if (terms.length === 0) {
+		return { engine: outcome.engine, probeId: outcome.probeId, total: 0, relevant: 0, ratio: 0 };
+	}
 	let relevant = 0;
 	for (const hit of outcome.hits) {
 		if (scoreHit(hit, terms).relevant) relevant += 1;
@@ -105,7 +119,6 @@ export function assessOutcome(outcome: EngineOutcome, probes: Map<string, Probe>
 		total,
 		relevant,
 		ratio,
-		suspect: total >= MIN_SAMPLE && ratio < SUSPECT_RATIO,
 	};
 }
 

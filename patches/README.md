@@ -3,7 +3,7 @@
 ## `pi-subagents-extension-tools.patch`
 
 **Problem.** pi-subagents builds each child's tool allowlist by intersecting the
-agent's declared tools with *host builtin* tools:
+agent's declared tools with *host builtin* tools (condensed):
 
 ```ts
 const PI_BUILTIN_TOOL_NAMES = new Set(["read","bash","powershell","edit","write","grep","find","ls"]);
@@ -12,7 +12,8 @@ pi.getAllTools().filter(t => t.sourceInfo?.source === "builtin"
 ```
 
 Any tool registered by an *extension* therefore fails the filter and is dropped
-before the child is launched. The runner reports it as:
+before the child is launched. The runner reports it as (condensed; the real line
+is one string and also names the requested tools):
 
 ```
 [pi-subagents] Agent 'web-researcher': host runtime tool availability omitted
@@ -37,4 +38,7 @@ child could not already have had.
 ./apply.sh
 ```
 
-Re-run after any `pi-subagents` update, which overwrites `src/`.
+Re-run after any `pi-subagents` update, which overwrites `src/`. The target
+defaults to `$HOME/.pi/agent/npm/node_modules/pi-subagents`; override it with
+`PI_SUBAGENTS_DIR=/path/to/pi-subagents`. To revert, copy back the
+`child-tool-plan.ts.orig-*` backup `apply.sh` writes beside the file.

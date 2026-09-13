@@ -263,6 +263,33 @@ console.log("=== decoy exoneration (regression) ===");
 	check("a working engine is not condemned", !goodVerdict.suspectEngines.duckduckgo, goodVerdict.suspectEngines.duckduckgo);
 	check("working engine results survive", goodVerdict.hits.length === 5, `${goodVerdict.hits.length}`);
 }
+console.log("=== unjudgeable probe does not disable the gate ===");
+{
+	// A stop-word-only query yields no terms. Every hit scoring as "relevant"
+	// would make aggregate precision 100% and exonerate a decoying engine.
+	const vague = { id: "v1", query: "how do i do it", label: "vague" };
+	const decoys = Array.from({ length: 6 }, (_, i) => ({
+		engine: "bing" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5,
+		hits: Array.from({ length: 5 }, (_, j) => ({
+			title: "Trinidad Carnival Fiestas San Juaneras",
+			url: `https://decoy.example.com/${i}-${j}`,
+			snippet: "a traditional annual celebration",
+			position: j + 1, engine: "bing" as const, probeId: "v1",
+		})),
+	}));
+	const v = applyRelevanceGate(decoys, [vague]);
+	check("unjudgeable probes are excluded, not scored as relevant", v.assessments.every((a) => a.total === 0), JSON.stringify(v.assessments.map((a) => a.total)));
+	check("nothing is fabricated as relevant", v.assessments.every((a) => a.relevant === 0));
+
+	// And a mixed wave: the judgeable probe still condemns a decoying engine.
+	const real = { id: "r1", query: "postgres index bloat", label: "real" };
+	const mixed = [
+		...decoys.map((o) => ({ ...o, probeId: "r1" })),
+		{ engine: "bing" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5, hits: decoys[0].hits.map((h) => ({ ...h, probeId: "v1" })) },
+	];
+	const mv = applyRelevanceGate(mixed, [vague, real]);
+	check("judgeable probes still condemn a decoy", Boolean(mv.suspectEngines.bing), mv.suspectEngines.bing);
+}
 console.log(`\n=== ${FAILURES.length === 0 ? `UNIT PASSED (${checks} checks)` : `UNIT FAILED (${FAILURES.length}/${checks})`} ===`);
 for (const failure of FAILURES) console.log(`  - ${failure}`);
 process.exit(FAILURES.length === 0 ? 0 : 1);

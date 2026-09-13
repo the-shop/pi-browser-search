@@ -3,7 +3,7 @@
  *
  * Builds a throwaway profile, imports trust from a browser profile if available,
  * runs a full multi-probe search through the real browser, ranks the result, and
- * exercises the content store. This is the same code path the `web_search` tool
+ * exercises the content store. This is the same code path the `ts_web_search` tool
  * runs.
  *
  * Run: node --experimental-strip-types tools/e2e.ts
@@ -30,6 +30,10 @@ function check(label: string, condition: boolean, detail = ""): void {
 }
 
 const profileDir = mkdtempSync(join(tmpdir(), "pbs-e2e-"));
+/** Populated inside the try; read by the exit classification below. */
+let degradedEngines: Record<string, string> = {};
+let deliveredAny = false;
+let trustNote = "";
 const chrome = new ChromeManager({ profileDir, idleMs: 0 });
 
 try {
@@ -50,6 +54,7 @@ try {
 
 	console.log("=== 2. Google trust ===\n");
 	const trust = await ensureGoogleTrust(chrome, undefined, { profileDir, importCookies: true });
+	trustNote = `google lane: ${trust.state} — ${trust.reason}`;
 	console.log(`  state: ${trust.state}`);
 	console.log(`  reason: ${trust.reason}`);
 	check("trust verdict is reported", ["trusted", "untrusted", "unknown"].includes(trust.state));
@@ -76,6 +81,8 @@ try {
 		onProgress: (message) => console.log(`    · ${message}`),
 	});
 
+	degradedEngines = { ...wave.degraded };
+	deliveredAny = wave.hits.length > 0;
 	console.log(`\n  achieved mix: ${wave.mixSummary}`);
 	for (const [engine, reason] of Object.entries(wave.degraded)) console.log(`  ! ${engine}: ${reason}`);
 
@@ -126,10 +133,13 @@ try {
 	);
 
 	console.log("=== 4. content store ===\n");
+	const first = ranked[0];
 	const responseId = createArtifact({
 		queries: [query],
 		ranked,
-		documents: [{ url: ranked[0].url, title: ranked[0].title, text: `Full text of ${ranked[0].title}. Index bloat happens when dead tuples accumulate.`, kind: "html" }],
+		documents: first
+			? [{ url: first.url, title: first.title, text: `Full text of ${first.title}. Index bloat happens when dead tuples accumulate.`, kind: "html" }]
+			: [],
 		probes: probes.length,
 		achieved: wave.achieved,
 		degraded: wave.degraded,
@@ -154,4 +164,29 @@ try {
 	for (const failure of FAILURES) console.log(`  - ${failure}`);
 }
 
+// An environment where every engine is externally blocked says nothing about
+// whether this code works, and treating it as a failure would train us to
+// ignore the test. Exit 2 marks it inconclusive: no engine delivered, but each
+// one said why, so nothing failed silently.
+// Only inconclusive when every failure is a *consequence* of having no hits.
+// If some other assertion fails alongside an outage, that is a real defect and
+// must still fail the run.
+const HIT_DEPENDENT = new Set([
+	"wave produced hits",
+	"ranking produced results",
+	"findText returns passages",
+]);
+// Keyed on "no engine delivered anything", not on a count of degraded entries:
+// an untrusted Google lane is *excluded* from the probes rather than run and
+// failed, so it never appears in `degraded` and a count is the wrong invariant.
+const allEnginesBlocked =
+	!deliveredAny && FAILURES.length > 0 && FAILURES.every((f) => HIT_DEPENDENT.has(f));
+if (allEnginesBlocked) {
+	console.log("\n=== E2E INCONCLUSIVE — no search engine delivered ===");
+	if (trustNote) console.log(`  ${trustNote}`);
+	for (const [engine, reason] of Object.entries(degradedEngines)) console.log(`  ${engine}: ${reason}`);
+	console.log("\nNo engine delivered, so the pipeline could not be exercised against live data.");
+	console.log("Not a code failure: every engine reported its reason rather than failing silently.");
+	process.exit(2);
+}
 process.exit(FAILURES.length === 0 ? 0 : 1);

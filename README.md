@@ -3,11 +3,11 @@
 Headless-browser web search for the [pi](https://github.com/the-shop/pi-the-shop) coding agent.
 No API keys — Chrome does the searching and the scraping.
 
-Replaces `web_search` from `pi-web-access`.
+Replaces `web_search` from `pi-web-access` (this fork's own tools carry the `ts_` prefix; the incumbent's did not).
 
 ## Status: working
 
-`web_search`, `fetch_content` and `get_search_content` are implemented and
+`ts_web_search`, `ts_fetch_content` and `ts_get_search_content` are implemented and
 verified end to end against live browsers.
 
 | Engine | Spec share | Measured state |
@@ -18,7 +18,9 @@ verified end to end against live browsers.
 
 A typical 10-probe search returns in ~22s and delivers a Google/DuckDuckGo mix.
 Bing is detected and reported as degraded rather than silently absorbed, so the
-achieved mix is roughly **Google 70 / DuckDuckGo 30** on this host.
+achieved mix is roughly **Google 78 / DuckDuckGo 22** on this host: the 7/2/1
+allocation still spends one probe per call on Bing, and the gate zeroes its
+share once the decoy is detected.
 
 ### Install
 
@@ -28,14 +30,16 @@ pi install git:github.com/the-shop/pi-browser-search
 
 Requires Chrome. Override its location with `PI_BROWSER_SEARCH_CHROME` if it is
 not in the usual place. On first search the extension bootstraps a dedicated
-browser profile (see "Google trust" below); that profile lives in
-`$PI_CODING_AGENT_DIR/browser-search/profile` and is never your own.
+browser profile (see "Google trust" below). Each process uses its own
+`$PI_CODING_AGENT_DIR/browser-search/profile-<pid>`, seeded with the two
+anonymous cookies from `.../browser-search/profile`, pruned after 3 days and
+removed at shutdown. It is never your own browser's profile.
 
 See "Engine findings" below.
 
 ## Design
 
-One `web_search` call fans out into **at least 10 probes**: the verbatim query,
+One `ts_web_search` call fans out into **at least 10 probes**: the verbatim query,
 a quoted variant, explanatory and practical reformulations, issue-signal probes,
 `site:`-scoped source mining, recency-restricted and terminology variants.
 
@@ -44,8 +48,9 @@ random sampling — so 10 probes lands exactly 7/2/1 rather than clustering, and
 the engines interleave instead of arriving in bursts. Probes that constrain their
 own eligibility (`filetype:`) have those constraints honoured first.
 
-A second wave fires when precision is weak: page 2 of the best probes, `site:`
-probes on the domains discovered in wave 1, and terminology drift.
+With `depth: "deep"`, a second wave adds `site:` probes on the domains discovered
+in wave 1 (up to 3). Terminology drift and page-2 deepening are not tiered by depth;
+they are wave-1 strategies.
 
 Results are ranked primarily by **cross-engine corroboration**, then probe
 support, position, domain authority and freshness, with a max-two-per-domain
@@ -108,17 +113,21 @@ src/engines/     google.ts, duckduckgo.ts, bing.ts, schedule.ts, execute.ts,
                  resolve.ts (encrypted redirect resolution)
 src/search/      expand.ts (probe fan-out), normalize.ts, rank.ts, relevance.ts
 src/content/     extract.ts (readability-style page scraping)
-src/store.ts     session content store behind get_search_content
+src/store.ts     session content store behind ts_get_search_content
 tools/           unit.ts, registration.ts, e2e.ts, gate.ts, probes/
 ```
 
-Runs on Node 22+ using only built-ins (`WebSocket`, `fetch`, `node:sqlite`). The
-user's own Chrome profile is never opened, read or modified.
+Runs on Node 22+ with no browser-automation or HTTP dependencies: CDP over the
+built-in `WebSocket`, `node:sqlite` for the cookie store, and `typebox` for the
+tool schemas. The
+extension never opens, reads or modifies your own Chrome profile. The dev tools
+under `tools/` do read it, read-only, to import the two anonymous cookies.
 
 ## Tests
 
 ```sh
-npm test            # 44 unit checks + 34 registration checks, no browser needed
+npm install         # provides `typebox` (pi also ships a copy)
+npm test            # secret scan + unit checks + registration checks, no browser needed
 npm run test:e2e    # full pipeline against live browsers
 ```
 
@@ -164,8 +173,9 @@ tarpit rather than a locale bug.
   also arrives with characters stripped (`Speedtest` → `Speedte t`), which is
   consistent with deliberate obfuscation rather than a parsing fault.
 
-  **Bing is therefore unusable from this machine**, and its 10% share should be
-  redistributed rather than silently reported as satisfied.
+  **Bing is therefore unusable from this machine.** Its 10% share is still spent
+  on it every call (`src/engines/schedule.ts`); the degraded report is what keeps
+  that visible until the share is actually redistributed.
 
 **DuckDuckGo.** Reliable via the no-JS endpoints. Needs a UA without the
 `HeadlessChrome` token (or it returns a duck CAPTCHA); GET only, since POST
