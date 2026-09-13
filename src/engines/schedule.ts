@@ -66,7 +66,7 @@ export function apportion(total: number, weights: EngineWeights): EngineWeights 
 
 /**
  * Smooth weighted round-robin ordering over `count` slots.
- * Produces an evenly interleaved sequence, e.g. 70/20/10 over 10 slots yields
+ * Produces an evenly interleaved sequence, e.g. 70/30 over 10 slots yields
  * google, duckduckgo, google, google, duckduckgo, google, google, duckduckgo, ...
  */
 export function smoothSequence(count: number, weights: EngineWeights): EngineId[] {

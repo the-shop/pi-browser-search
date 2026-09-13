@@ -46,7 +46,7 @@ a quoted variant, explanatory and practical reformulations, issue-signal probes,
 `site:`-scoped source mining, recency-restricted and terminology variants.
 
 Engines are assigned by **smooth weighted round-robin** (nginx's algorithm), not
-random sampling — so 10 probes lands exactly 7/2/1 rather than clustering, and
+random sampling — so 10 probes lands exactly 7/3 rather than clustering, and
 the engines interleave instead of arriving in bursts. Probes that constrain their
 own eligibility (`filetype:`) have those constraints honoured first.
 

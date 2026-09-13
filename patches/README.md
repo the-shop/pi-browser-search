@@ -17,7 +17,7 @@ is one string and also names the requested tools):
 
 ```
 [pi-subagents] Agent 'web-researcher': host runtime tool availability omitted
-  [web_search, fetch_content, get_search_content].
+  [ts_web_search, ts_fetch_content, ts_get_search_content].
   Effective tool allowlist: [read, write, contact_supervisor]
 ```
 
