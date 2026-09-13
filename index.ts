@@ -249,7 +249,9 @@ export default function (pi: ExtensionAPI) {
 				for (const hit of ranked.slice(0, ENRICH_TOP)) {
 					try {
 						const page = await fetchPage(browser, hit.url, { signal, maxChars: 8_000 });
-						if (page.text) {
+						// Enrichment exists to give the model substance; boilerplate is not
+						// substance, so a suspect page is skipped rather than included.
+						if (page.text && !page.suspect) {
 							documents.push({ url: page.url, title: page.title || hit.title, text: page.text, kind: page.kind });
 						}
 					} catch {
@@ -331,20 +333,25 @@ export default function (pi: ExtensionAPI) {
 
 			const browser = getChrome();
 			const maxChars = params.maxChars ?? 30_000;
-			const results: Array<{ url: string; title: string; text: string; kind: string; note?: string }> = [];
+			const results: Array<{ url: string; title: string; text: string; kind: string; note?: string; suspect?: string }> = [];
 			const documents: StoredDocument[] = [];
 
 			for (const [index, url] of urls.entries()) {
 				onUpdate?.({ content: [{ type: "text", text: `Fetching ${url} (${index + 1}/${urls.length})…` }] });
 				try {
 					const page = await fetchPage(browser, url, { signal, maxChars });
-					if (page.text) documents.push({ url: page.url, title: page.title, text: page.text, kind: page.kind });
+					// A suspect extraction is not content; keep it out of the store so
+					// get_search_content cannot later hand back a consent dialog.
+					if (page.text && !page.suspect) {
+						documents.push({ url: page.url, title: page.title, text: page.text, kind: page.kind });
+					}
 					results.push({
 						url: page.url,
 						title: page.title,
 						text: page.text,
 						kind: page.kind,
 						...(page.fallback ? { note: page.fallback } : {}),
+						...(page.suspect ? { suspect: page.suspect } : {}),
 					});
 				} catch (error) {
 					results.push({
@@ -385,6 +392,12 @@ export default function (pi: ExtensionAPI) {
 					const meta = `${result.url}${result.kind !== "html" ? ` · ${result.kind}` : ""}`;
 					if (!result.text) {
 						return `${header}\n${meta}\n\n[failed: ${result.note ?? "no content"}]`;
+					}
+					if (result.suspect) {
+						// Never present boilerplate as page content. The earlier version
+						// returned a cookie dialog as a successful extraction, which is worse
+						// than an error because nothing in the output showed it.
+						return `${header}\n${meta}\n\n[EXTRACTION SUSPECT: ${result.suspect}]\nThis page did not yield readable content — most likely a cookie-consent or login overlay, or content rendered only after interaction. Do not treat the text below as the page content.\n\n--- raw extraction (unverified) ---\n${result.text.slice(0, 800)}`;
 					}
 					return `${header}\n${meta}\n${result.note ? `(!) ${result.note}\n` : ""}\n${result.text}`;
 				})

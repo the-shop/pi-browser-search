@@ -9,6 +9,7 @@ import { canonicalizeUrl, cleanText, normalizeHits } from "../src/search/normali
 import { contentWords, detectIntent, expandQuery } from "../src/search/expand.ts";
 import { rankHits } from "../src/search/rank.ts";
 import { queryTerms, scoreHit } from "../src/search/relevance.ts";
+import { assessExtraction } from "../src/content/extract.ts";
 import type { RawHit } from "../src/engines/types.ts";
 
 const FAILURES: string[] = [];
@@ -167,6 +168,55 @@ console.log("=== relevance gate ===");
 	check("on-topic coverage exceeds off-topic", scoreHit(onTopic, terms).coverage > scoreHit(offTopic, terms).coverage);
 }
 
+
+console.log("=== extraction quality ===");
+{
+	// The failure this guards: a consent-walled site extracts to a few thousand
+	// characters of cookie dialog and otherwise looks like a success.
+	const consentDialog = [
+		"Cijenimo vašu privatnost. Mi i koristimo kolačiće i druge tehnologije praćenja kako bismo poboljšali vaše iskustvo.",
+		"Možemo pohraniti informacije na uređaju i obraditi osobne podatke, kao što su vaša IP adresa i podaci o pregledavanju,",
+		"za personalizirano oglašavanje i sadržaj, oglašavanje i mjerenje sadržaja.",
+		"Vaši izbori će se primijeniti samo na ovu mrežnu stranicu.",
+		"Kategorije Kolačića: koristimo kolačiće kako bismo vam pomogli da se učinkovito krećete.",
+		"Neophodni kolačići pohranjuju se u vašem pregledniku jer su neophodni za osnovne funkcionalnosti.",
+		"Kolačić visited. Trajanje 1 godina. Opis nije dostupan.",
+		"Kolačić ruid. Trajanje 1 mjesec. Opis za funkcionalnost.",
+		"Ovaj kolačić je neophodan za funkciju prijave. Kolačići koji su kategorizirani kao neophodni.",
+		"Pristanak na kolačiće možete promijeniti u bilo kojem trenutku. Suglasnost za kolačiće i praćenje.",
+		"gdpr privacy policy consent tracking cookies opt-in necessary cookies",
+	].join("\n");
+	const v = assessExtraction(consentDialog, 180_000);
+	check("cookie dialog is flagged suspect", v.suspect, v.reason);
+
+	// A real article that happens to discuss cookies must NOT be flagged.
+	const article = [
+		"# How cookies work in the browser",
+		"",
+		"A cookie is a small piece of data that a server sends to the user's web browser. The browser may store it and send it back with later requests to the same server. Typically, it is used to tell if two requests came from the same browser, keeping a user logged in between page visits, for example.",
+		"",
+		"## Setting a cookie",
+		"",
+		"When a server receives an HTTP request, it can send a Set-Cookie header with the response. The browser then stores the cookie and includes it in a Cookie header on subsequent requests to the same origin. Attributes such as HttpOnly and SameSite restrict how the cookie may be read or transmitted, which limits the damage from cross-site scripting.",
+		"",
+		"## Privacy considerations",
+		"",
+		"Because cookies enable tracking across sites, regulators require consent for non-essential ones under the GDPR. The consent tracking requirements described in the privacy policy apply to analytics and advertising cookies, but not to necessary cookies that are required for the site to function at all.",
+	].join("\n");
+	const a = assessExtraction(article, 40_000);
+	check("a real article about cookies is not flagged", !a.suspect, a.reason);
+
+	// Navigation soup: many short fragments, no prose.
+	const menu = Array.from({ length: 40 }, (_, i) => `Item ${i} kategoriја`).join("\n");
+	check("nav/menu soup is flagged", assessExtraction(menu, 60_000).suspect);
+
+	check("very short text is flagged", assessExtraction("hi", 1000).suspect);
+	check("tiny extraction from a huge document is flagged", assessExtraction("x".repeat(300), 900_000).suspect);
+
+	const prose = "".padEnd(0) +
+		"PostgreSQL index bloat happens when dead tuples accumulate and are not reclaimed by autovacuum quickly enough. ".repeat(6);
+	check("ordinary prose is not flagged", !assessExtraction(prose, 30_000).suspect);
+}
 console.log(`\n=== ${FAILURES.length === 0 ? `UNIT PASSED (${checks} checks)` : `UNIT FAILED (${FAILURES.length}/${checks})`} ===`);
 for (const failure of FAILURES) console.log(`  - ${failure}`);
 process.exit(FAILURES.length === 0 ? 0 : 1);
