@@ -1,0 +1,52 @@
+--- src/runs/shared/child-tool-plan.ts.orig-20260913-120140	2026-09-13 12:01:40
++++ src/runs/shared/child-tool-plan.ts	2026-09-13 12:01:40
+@@ -337,25 +337,37 @@
+ }
+ 
+ /**
+- * Extract the names of builtin tools the host provides. Use this to pass
++ * Extract the names of tools the host provides. Use this to pass
+  * `hostAvailableBuiltins` to `resolvePiLaunchToolPlan` so child tool plans
+  * intersect declared agent tools with what the host actually supports.
+  *
+- * Returns `undefined` when builtin tool discovery fails or yields nothing,
+- * so callers skip the intersection (fail-safe to allowing all declared tools).
+- * This handles test mocks without proper tool registration and hosts whose
++ * LOCAL PATCH (pi-browser-search): this previously returned builtins only,
++ * filtered by `sourceInfo.source === "builtin"`. That silently removed every
++ * extension-provided tool from a child's allowlist: a declared name such as
++ * `web_search` was classified as an unavailable host builtin and dropped
++ * before the child could load its provider, contradicting the documented
++ * behaviour of `subagentOnlyExtensions` ("the registered name survives the
++ * strict allowlist"). The runner reported it as:
++ *
++ *   host runtime tool availability omitted [web_search, fetch_content, ...]
++ *
++ * Extension tools are therefore admitted here too. This is safe because pi
++ * applies `--tools` as a plain name filter (agent-session.js `isAllowedTool`),
++ * so an allowlist entry with no matching registered tool is inert rather than
++ * an error. A name only becomes usable when the child actually loads the
++ * extension that registers it, so this grants nothing that the child could not
++ * already have had.
++ *
++ * Returns `undefined` when tool discovery fails or yields nothing, so callers
++ * skip the intersection (fail-safe to allowing all declared tools). This
++ * handles test mocks without proper tool registration and hosts whose
+  * getAllTools() throws before extensions load.
+  */
+ export function getHostBuiltinToolNames(pi: Pick<ExtensionAPI, "getAllTools">): string[] | undefined {
+ 	try {
+-		const builtins = pi
+-			.getAllTools()
+-			.filter((tool) => {
+-				const source = (tool.sourceInfo as { source?: string } | undefined)?.source;
+-				return source === "builtin" || (source === "auto" && PI_BUILTIN_TOOL_NAMES.has(tool.name));
+-			})
+-			.map((tool) => tool.name);
+-		return builtins.length > 0 ? builtins : undefined;
++		const names = pi.getAllTools().map((tool) => tool.name);
++		const unique = [...new Set(names)];
++		return unique.length > 0 ? unique : undefined;
+ 	} catch {
+ 		return undefined;
+ 	}
