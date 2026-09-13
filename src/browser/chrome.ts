@@ -7,10 +7,10 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { CdpConnection, CdpError, sleep, type CdpSession } from "./cdp.ts";
 
 const DEFAULT_IDLE_MS = 5 * 60 * 1000;
@@ -60,6 +60,57 @@ export function resolveChromePath(explicit?: string): string {
 export function defaultProfileDir(): string {
 	const base = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
 	return join(base, "browser-search", "profile");
+}
+
+/**
+ * Per-process working profile.
+ *
+ * A single shared profile directory meant every concurrent process opened the
+ * same Chrome user-data-dir, so sibling processes fought over it: two of five
+ * parallel subagent runs logged "Chrome exited immediately after launch" 10 and
+ * 14 times, and two Chromes concurrently opened the same SQLite cookie store.
+ * Nothing corrupt that time, but sharing mutable state across processes is a
+ * hazard rather than a design, and it is not representable if each process owns
+ * its own directory.
+ *
+ * The profile therefore contains nothing that needs to be shared: cache,
+ * history and GPU state are all disposable, and the only irreplaceable content
+ * is the two anonymous Google cookies, which are copied in from
+ * `defaultProfileDir()` on first use (see `seedProfileIfNeeded`).
+ */
+export function processProfileDir(): string {
+	return `${defaultProfileDir()}-${process.pid}`;
+}
+
+/**
+ * Remove working profiles left behind by processes that are gone.
+ *
+ * A crashed or hard-killed run cannot clean up after itself, so without this
+ * the per-process directories accumulate. Age is used rather than a liveness
+ * check because PIDs are recycled.
+ */
+export function pruneStaleProfiles(maxAgeMs = 3 * 24 * 60 * 60 * 1000): number {
+	const reference = defaultProfileDir();
+	const parent = dirname(reference);
+	const prefix = `${basename(reference)}-`;
+	let removed = 0;
+	try {
+		for (const entry of readdirSync(parent, { withFileTypes: true })) {
+			if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue;
+			const full = join(parent, entry.name);
+			if (full === processProfileDir()) continue;
+			try {
+				if (Date.now() - statSync(full).mtimeMs < maxAgeMs) continue;
+				rmSync(full, { recursive: true, force: true });
+				removed += 1;
+			} catch {
+				// Another process may be removing it concurrently.
+			}
+		}
+	} catch {
+		// No parent directory yet on a first run.
+	}
+	return removed;
 }
 
 async function findFreePort(): Promise<number> {
@@ -131,7 +182,9 @@ export class ChromeManager {
 		const chromePath = resolveChromePath(this.options.chromePath);
 		const { profileDir, headless = true, extraArgs = [] } = this.options;
 		mkdirSync(profileDir, { recursive: true });
-		// A leftover lock from a hard-killed run would make Chrome refuse to start.
+		// Safe because the profile is exclusive to this process (see
+		// `processProfileDir`): any lock found here belongs to a previous run of
+		// *this* process that was hard-killed, never to a live sibling.
 		for (const stale of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
 			rmSync(join(profileDir, stale), { force: true });
 		}

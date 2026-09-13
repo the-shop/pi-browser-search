@@ -22,9 +22,15 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { rmSync } from "node:fs";
 import { Type } from "typebox";
-import { ChromeManager, defaultProfileDir } from "./src/browser/chrome.ts";
-import { ensureGoogleTrust, resetTrustCache } from "./src/browser/profile.ts";
+import { ChromeManager, defaultProfileDir, processProfileDir, pruneStaleProfiles } from "./src/browser/chrome.ts";
+import {
+	ensureGoogleTrust,
+	hasProfileGoogleCookies,
+	importAnonymousGoogleCookies,
+	resetTrustCache,
+} from "./src/browser/profile.ts";
 import { fetchPage } from "./src/content/extract.ts";
 import { canonicalizeUrl } from "./src/search/normalize.ts";
 import { runWave } from "./src/engines/execute.ts";
@@ -43,8 +49,26 @@ let chrome: ChromeManager | undefined;
 
 function getChrome(): ChromeManager {
 	if (!chrome) {
+		// Each process gets its own browser profile. A shared one meant concurrent
+		// subagent runs opened the same user-data-dir and fought over it, logging
+		// "Chrome exited immediately after launch" repeatedly and pointing two
+		// Chrome instances at one SQLite cookie store.
+		//
+		// Nothing in the working profile needs to be shared — cache, history and
+		// GPU state are disposable. The only irreplaceable content is the two
+		// anonymous Google cookies, so those are copied across on first use.
+		const working = processProfileDir();
+		try {
+			pruneStaleProfiles();
+			if (!hasProfileGoogleCookies(working)) {
+				importAnonymousGoogleCookies(working, defaultProfileDir());
+			}
+		} catch {
+			// Seeding is best-effort: without it the Google lane degrades and every
+			// other engine still works, which the search reports honestly.
+		}
 		chrome = new ChromeManager({
-			profileDir: defaultProfileDir(),
+			profileDir: working,
 			idleMs: 5 * 60 * 1000,
 			onExit: () => {
 				// A crash invalidates the cached trust verdict.
@@ -117,8 +141,9 @@ export default function (pi: ExtensionAPI) {
 
 			// Establish Google trust before the wave so the mix is known up front.
 			const trust = await ensureGoogleTrust(browser, signal, {
-				profileDir: defaultProfileDir(),
+				profileDir: processProfileDir(),
 				importCookies: true,
+				sourceProfileDir: defaultProfileDir(),
 			});
 
 			const planned: Probe[] = [];
@@ -499,6 +524,13 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", async () => {
 		await chrome?.close().catch(() => undefined);
 		chrome = undefined;
+		// The working profile is this process's own scratch space, so remove it
+		// rather than leaving one directory behind per run.
+		try {
+			rmSync(processProfileDir(), { recursive: true, force: true });
+		} catch {
+			// Best-effort; pruneStaleProfiles() collects anything left over.
+		}
 	});
 }
 
