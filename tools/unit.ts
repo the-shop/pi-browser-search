@@ -122,11 +122,11 @@ console.log("=== ranking ===");
 	const dupes = normalizeHits([
 		mk("https://example.com/page", "google", 1),
 		mk("https://www.example.com/page/", "duckduckgo", 1),
-		mk("https://example.com/page?utm_source=x", "bing", 1),
+		mk("https://example.com/page?utm_source=x", "duckduckgo", 1),
 	]);
 	const deduped = rankHits("postgres index bloat", dupes);
 	eq("url variants collapse to one result", deduped.length, 1);
-	eq("all three engines counted", deduped[0].engines.length, 3);
+	eq("both engines counted", deduped[0].engines.length, 2);
 
 	// Per-domain cap.
 	const many = normalizeHits(
@@ -162,7 +162,7 @@ console.log("=== relevance gate ===");
 		title: "Frasi di auguri di buon onomastico",
 		url: "https://www.frasimania.it/frasi-buon-onomastico/",
 		snippet: "immagini di auguri",
-		position: 1, engine: "bing", probeId: "p1",
+		position: 1, engine: "duckduckgo", probeId: "p1",
 	};
 	check("on-topic hit passes", scoreHit(onTopic, terms).relevant);
 	check("off-topic hit fails", !scoreHit(offTopic, terms).relevant);
@@ -221,8 +221,8 @@ console.log("=== extraction quality ===");
 
 console.log("=== decoy exoneration (regression) ===");
 {
-	// Real case: Bing returned carnival listings for a laptop query across every
-	// probe, yet was passed through as "bing 40/40 (100%)" because a single probe
+	// Real case: an engine returned carnival listings for a laptop query across
+	// every probe, yet was passed through as "100%" because a single probe
 	// scored above the per-hit bar by coincidence. Condemning on aggregate
 	// precision removes that loophole.
 	const probe = { id: "p1", query: "MSI Katana 15 HX B14WGK-821XPL RTX 5070 cijena", label: "x" };
@@ -230,24 +230,24 @@ console.log("=== decoy exoneration (regression) ===");
 		title: "Sobre este evento Trinidad Carnival Fiestas San Juaneras",
 		url: `https://decoy.example.com/${i}`,
 		snippet: "Trinidad Carnival is a traditional annual celebration",
-		position: i + 1, engine: "bing", probeId: "p1",
+		position: i + 1, engine: "duckduckgo", probeId: "p1",
 	});
 	// 39 probes of pure decoy.
 	const outcomes = Array.from({ length: 39 }, (_, i) => ({
-		engine: "bing" as const, probeId: "p1", status: "ok" as const,
+		engine: "duckduckgo" as const, probeId: "p1", status: "ok" as const,
 		hits: Array.from({ length: 10 }, (_, j) => decoy(j)), elapsedMs: 10,
 	}));
 	// One probe whose decoys coincidentally share a couple of query tokens.
 	outcomes.push({
-		engine: "bing" as const, probeId: "p1", status: "ok" as const, elapsedMs: 10,
+		engine: "duckduckgo" as const, probeId: "p1", status: "ok" as const, elapsedMs: 10,
 		hits: Array.from({ length: 4 }, (_, j) => ({
 			title: `Katana 15 for sale ${j}`,
 			url: `https://sneaky.example.com/${j}`,
-			snippet: "HX 15 laptop", position: j + 1, engine: "bing" as const, probeId: "p1",
+			snippet: "HX 15 laptop", position: j + 1, engine: "duckduckgo" as const, probeId: "p1",
 		})),
 	});
 	const verdict = applyRelevanceGate(outcomes, [probe]);
-	check("engine decoying across probes is condemned", Boolean(verdict.suspectEngines.bing), verdict.suspectEngines.bing);
+	check("engine decoying across probes is condemned", Boolean(verdict.suspectEngines.duckduckgo), verdict.suspectEngines.duckduckgo);
 	check("no decoy hits survive the gate", verdict.hits.length === 0, `${verdict.hits.length} survived`);
 
 	// A genuinely working engine must still survive: mostly-relevant output.
@@ -269,12 +269,12 @@ console.log("=== unjudgeable probe does not disable the gate ===");
 	// would make aggregate precision 100% and exonerate a decoying engine.
 	const vague = { id: "v1", query: "how do i do it", label: "vague" };
 	const decoys = Array.from({ length: 6 }, (_, i) => ({
-		engine: "bing" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5,
+		engine: "duckduckgo" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5,
 		hits: Array.from({ length: 5 }, (_, j) => ({
 			title: "Trinidad Carnival Fiestas San Juaneras",
 			url: `https://decoy.example.com/${i}-${j}`,
 			snippet: "a traditional annual celebration",
-			position: j + 1, engine: "bing" as const, probeId: "v1",
+			position: j + 1, engine: "duckduckgo" as const, probeId: "v1",
 		})),
 	}));
 	const v = applyRelevanceGate(decoys, [vague]);
@@ -285,10 +285,10 @@ console.log("=== unjudgeable probe does not disable the gate ===");
 	const real = { id: "r1", query: "postgres index bloat", label: "real" };
 	const mixed = [
 		...decoys.map((o) => ({ ...o, probeId: "r1" })),
-		{ engine: "bing" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5, hits: decoys[0].hits.map((h) => ({ ...h, probeId: "v1" })) },
+		{ engine: "duckduckgo" as const, probeId: "v1", status: "ok" as const, elapsedMs: 5, hits: decoys[0].hits.map((h) => ({ ...h, probeId: "v1" })) },
 	];
 	const mv = applyRelevanceGate(mixed, [vague, real]);
-	check("judgeable probes still condemn a decoy", Boolean(mv.suspectEngines.bing), mv.suspectEngines.bing);
+	check("judgeable probes still condemn a decoy", Boolean(mv.suspectEngines.duckduckgo), mv.suspectEngines.duckduckgo);
 }
 console.log(`\n=== ${FAILURES.length === 0 ? `UNIT PASSED (${checks} checks)` : `UNIT FAILED (${FAILURES.length}/${checks})`} ===`);
 for (const failure of FAILURES) console.log(`  - ${failure}`);

@@ -12,7 +12,7 @@
 
 import type { CdpSession } from "../browser/cdp.ts";
 
-export type EngineId = "google" | "duckduckgo" | "bing";
+export type EngineId = "google" | "duckduckgo";
 
 /** How a probe intends to be searched; adapters translate these to URL params. */
 export interface Probe {

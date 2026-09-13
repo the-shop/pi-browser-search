@@ -6,7 +6,7 @@ import { ChromeManager } from "../src/browser/chrome.ts";
 import { runWave } from "../src/engines/execute.ts";
 import type { EngineId, Probe } from "../src/engines/types.ts";
 
-const engine = (process.argv[2] ?? "bing") as EngineId;
+const engine = (process.argv[2] ?? "duckduckgo") as EngineId;
 const query = process.argv[3] ?? "postgres index bloat";
 const profileDir = mkdtempSync(join(tmpdir(), "pbs-dump-"));
 const chrome = new ChromeManager({ profileDir, idleMs: 0 });

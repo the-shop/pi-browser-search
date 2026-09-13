@@ -13,14 +13,16 @@ verified end to end against live browsers.
 | Engine | Spec share | Measured state |
 | --- | --- | --- |
 | Google | 70% | ✅ working — trust imported from two anonymous cookies; wrapped result links are resolved to real destinations |
-| DuckDuckGo | 20% | ✅ working — 10 relevant results per query |
-| Bing | 10% | ❌ decoy SERP — 0% relevant under every profile tested, including the real one |
+| DuckDuckGo | 30% | ✅ working — 10 relevant results per query |
+
 
 A typical 10-probe search returns in ~22s and delivers a Google/DuckDuckGo mix.
-Bing is detected and reported as degraded rather than silently absorbed, so the
-achieved mix is roughly **Google 78 / DuckDuckGo 22** on this host: the 7/2/1
-allocation still spends one probe per call on Bing, and the gate zeroes its
-share once the decoy is detected.
+Bing was removed from the engine set after it answered every probe with a
+complete, well-formed SERP of unrelated results — see "Engine findings" — and
+its 10 points went to DuckDuckGo rather than to Google, which is the scarce
+lane. A decoying engine would still be detected and reported as degraded rather
+than silently absorbed (see "Two failure modes"), so the mix shown is always the
+mix achieved.
 
 ### Install
 
@@ -62,11 +64,12 @@ Both were found by measurement, not assumption:
 
 1. **Google's block page returns HTTP 200 with a valid document.** Success is
    therefore detected structurally (result-container counts), never by status.
-2. **Bing returns a complete, well-formed SERP of entirely unrelated results** —
-   a "postgres index bloat" query returned German trade listings, Italian
-   name-day greetings and a Spanish dictionary entry. A structural check cannot
-   catch this. `src/search/relevance.ts` scores query-term coverage and condemns
-   an engine whose output is consistently off-target.
+2. **An engine can return a complete, well-formed SERP of entirely unrelated
+   results.** Bing did — a "postgres index bloat" query returned German trade
+   listings, Italian name-day greetings and a Spanish dictionary entry. A
+   structural check cannot catch that. `src/search/relevance.ts` scores
+   query-term coverage and condemns an engine whose output is consistently
+   off-target, which is what removed Bing from the engine set.
 
 An engine that fails either check is **reported as degraded**, and every
 response states the *achieved* engine mix rather than the requested one.
@@ -109,7 +112,7 @@ hide exactly the cross-engine agreement the ranker is built around.
 ```
 src/browser/     cdp.ts (dependency-free CDP client), chrome.ts (lifecycle),
                  profile.ts (trust import + bootstrap)
-src/engines/     google.ts, duckduckgo.ts, bing.ts, schedule.ts, execute.ts,
+src/engines/     google.ts, duckduckgo.ts, schedule.ts, execute.ts,
                  resolve.ts (encrypted redirect resolution)
 src/search/      expand.ts (probe fan-out), normalize.ts, rank.ts, relevance.ts
 src/content/     extract.ts (readability-style page scraping)
@@ -153,13 +156,14 @@ irrelevant. A freshly minted `NID` is **not** trusted, and does not become
 trusted after a cooldown (verified to 5 minutes with a passing control). So the
 lane cannot bootstrap itself; it needs a pre-aged pair.
 
-**Bing.** Serves a decoy SERP: HTTP 200, ordinary `li.b_algo` containers,
-plausible titles and links — all unrelated to the query. Consistent across
-`mkt`/`setlang`/`ensearch`/`cc` variants, and stable over time, so it is a bot
-tarpit rather than a locale bug.
+**Bing (removed).** Served a decoy SERP: HTTP 200, ordinary `li.b_algo`
+containers, plausible titles and links — all unrelated to the query. Consistent
+across `mkt`/`setlang`/`ensearch`/`cc` variants, and stable over time, so it was
+a bot tarpit rather than a locale bug. The investigation probe that established
+this was removed with the engine; its results are below.
 
-  Tested against profile trust directly (`tools/probe-bing-trust.ts`), because
-  trust is what fixes Google:
+  It was tested against profile trust directly, because trust is what fixes
+  Google:
 
   | Profile | Hits | Relevant |
   | --- | --- | --- |
@@ -173,9 +177,10 @@ tarpit rather than a locale bug.
   also arrives with characters stripped (`Speedtest` → `Speedte t`), which is
   consistent with deliberate obfuscation rather than a parsing fault.
 
-  **Bing is therefore unusable from this machine.** Its 10% share is still spent
-  on it every call (`src/engines/schedule.ts`); the degraded report is what keeps
-  that visible until the share is actually redistributed.
+  Bing was therefore unusable from this machine, and has been removed from the
+  engine set. Its 10 points went to DuckDuckGo, not to Google — the scarce lane
+  should not absorb a freed share. The relevance gate stays, because the failure
+  it detects is a property of automated SERP access rather than of Bing.
 
 **DuckDuckGo.** Reliable via the no-JS endpoints. Needs a UA without the
 `HeadlessChrome` token (or it returns a duck CAPTCHA); GET only, since POST

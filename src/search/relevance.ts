@@ -1,13 +1,14 @@
 /**
  * Relevance gate.
  *
- * Measured hazard: Bing answers an automated client with a **complete,
- * well-formed SERP of entirely unrelated results** — a "postgres index bloat"
- * query returned German trade listings, Italian name-day greetings and a
- * Spanish dictionary entry, all inside ordinary `li.b_algo` containers, at
- * HTTP 200. Google has an equivalent failure (its `/sorry` page also returns
- * 200). Structural checks therefore cannot distinguish a real SERP from a
- * decoy; only the *content* can.
+ * Measured hazard: an engine can answer an automated client with a **complete,
+ * well-formed SERP of entirely unrelated results**. Bing did exactly this — a
+ * "postgres index bloat" query returned German trade listings, Italian name-day
+ * greetings and a Spanish dictionary entry, all inside ordinary `li.b_algo`
+ * containers, at HTTP 200 — and was removed from the engine set for it. Google
+ * has an equivalent failure (its `/sorry` page also returns 200). Structural
+ * checks therefore cannot distinguish a real SERP from a decoy; only the
+ * *content* can, which is why this gate exists independently of any one engine.
  *
  * This gate scores how much of an engine's output actually relates to the
  * query. A poor score marks the engine degraded instead of letting noise into
@@ -149,7 +150,7 @@ export function applyRelevanceGate(
 		.map((outcome) => assessOutcome(outcome, probeById));
 
 	const suspectEngines: Partial<Record<EngineOutcome["engine"], string>> = {};
-	for (const engine of ["google", "duckduckgo", "bing"] as const) {
+	for (const engine of ["google", "duckduckgo"] as const) {
 		const engineOutcomes = outcomes.filter((outcome) => outcome.engine === engine);
 		if (engineOutcomes.length === 0) continue;
 
@@ -168,8 +169,8 @@ export function applyRelevanceGate(
 		// reasoning was backwards in the case that matters: with 40 probes it
 		// takes a single probe whose decoy hits coincidentally share a few query
 		// terms to exonerate an engine that is decoying everywhere else. Measured
-		// exactly that — Bing returned carnival listings for a laptop query
-		// across 40/40 probes and was passed through as "bing 40/40 (100%)",
+		// exactly that — an engine returned carnival listings for a laptop query
+		// across 40/40 probes and was passed through as "40/40 (100%)",
 		// because one probe scored above the per-hit bar by coincidence.
 		//
 		// Aggregate precision is the property we actually care about, and it has

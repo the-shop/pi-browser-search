@@ -3,7 +3,7 @@
  *
  * The spec asks for precision, and precision comes from *corroboration* rather
  * than from any single engine's ordering. A page that Google, DuckDuckGo and
- * Bing all place highly, reached via several independent probe strategies, is a
+ * DuckDuckGo all place highly, reached via several independent probe strategies, is a
  * far stronger answer than one engine's rank-1 hit — and it is also the best
  * available defence against a single engine returning a plausible-looking but
  * off-target SERP.
@@ -64,7 +64,6 @@ export interface RankOptions {
 const ENGINE_TRUST: Record<EngineId, number> = {
 	google: 1.0,
 	duckduckgo: 0.9,
-	bing: 0.75,
 };
 
 /** Intent-agnostic authority prior. Deliberately small — it breaks ties, it

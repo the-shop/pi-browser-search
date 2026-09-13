@@ -21,8 +21,6 @@ up its own temporary profile.
 | `cookies.mjs` | Can Chrome's cookie store be read directly? (No — Keychain.) |
 | `phase0.mjs` | Is Google's trust carried by auth cookies, or by history? |
 | `phase0b.mjs` | Can a blank profile be bootstrapped by injecting cookies? |
-| `probe-bing-trust.ts` (in `../`) | Is Bing's decoy trust-dependent? (No.) |
-
 Five probes ran during the investigation but are **not in this checkout**:
 `organic.mjs`, `organic2.mjs`, `isolate.mjs`, `discriminate.mjs`, `cooldown.mjs`.
 They produced the `NID`+`SOCS` minimal-set result and the cooldown result quoted in
@@ -33,11 +31,10 @@ Two methodology notes worth keeping:
 
 - **Always run a control in the same window.** Interleave a known-good profile with
   the condition under test, because Google's throttling is partly time-varying.
-  `../probe-bing-trust.ts` still does this; the removed `discriminate.mjs` and
-  `cooldown.mjs` did it for the cookie-age question. Without a control it is
+  The removed `discriminate.mjs` and `cooldown.mjs` probes did this for the
+  cookie-age question. Without a control it is
   impossible to tell a cookie effect from an IP effect.
 - **Cookie checks must read the live jar** (`Network.getCookies`), not the
   SQLite file. Chrome flushes lazily, so a file read reports an empty jar on a
   profile that demonstrably has cookies.
 
-| `probe-bing-trust.ts` | Is Bing's decoy SERP trust-dependent like Google's? (No — 0% relevant under every profile, including the real one.) |

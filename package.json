@@ -1,7 +1,7 @@
 {
   "name": "pi-browser-search",
   "version": "0.1.0",
-  "description": "Headless-browser web search for pi: multi-engine fan-out (Google/DuckDuckGo/Bing), 70/20/10 weighted routing, cross-engine corroboration ranking, and browser-based page scraping — no API keys.",
+  "description": "Headless-browser web search for pi: multi-engine fan-out (Google/DuckDuckGo), 70/30 weighted routing, cross-engine corroboration ranking, and browser-based page scraping — no API keys.",
   "keywords": [
     "pi-package",
     "pi",
@@ -11,8 +11,7 @@
     "cdp",
     "scraping",
     "google",
-    "duckduckgo",
-    "bing"
+    "duckduckgo"
   ],
   "license": "MIT",
   "type": "module",

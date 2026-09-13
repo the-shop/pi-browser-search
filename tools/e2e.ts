@@ -66,7 +66,7 @@ try {
 	const probes: Probe[] = expansion.probes.map((probe, index) => ({
 		...probe,
 		id: String(index + 1),
-		...(trust.state === "trusted" ? {} : { engines: ["duckduckgo", "bing"] as EngineId[] }),
+		...(trust.state === "trusted" ? {} : { engines: ["duckduckgo"] as EngineId[] }),
 	}));
 	const strategyByProbe = new Map(probes.map((probe) => [probe.id, probe.strategy]));
 	console.log(`  ${probes.length} probes, intent=${expansion.intent}, strategies=${expansion.strategies.length}`);
@@ -127,8 +127,7 @@ try {
 	check(
 		"corroboration recorded when multiple engines deliver",
 		// Corroboration is only possible when more than one engine actually
-		// delivered; with Bing decoyed and Google untrusted, one engine is all
-		// there can be.
+		// delivered; with Google untrusted, one engine is all there can be.
 		new Set(wave.hits.map((hit) => hit.engine)).size < 2 || ranked.some((hit) => hit.corroborated),
 	);
 

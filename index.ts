@@ -10,9 +10,9 @@
  *  - **At least 10 probes per search**, drawn from orthogonal strategies, with a
  *    second wave when precision is weak.
  *  - **Engine mix is reported as achieved, never as requested.** Google needs a
- *    trusted cookie pair (imported once, anonymous cookies only) and Bing
- *    serves a decoy SERP from this host, so the mix varies. Every response says
- *    what actually happened and names any engine that dropped out.
+ *    trusted cookie pair (imported once, anonymous cookies only), so the mix
+ *    varies. Every response says what actually happened and names any engine
+ *    that dropped out.
  *  - **A failed engine is never silently absorbed.** Decoy output is detected by
  *    query-term coverage and excluded, so a plausible-looking but unrelated SERP
  *    cannot pollute results.
@@ -85,12 +85,12 @@ export default function (pi: ExtensionAPI) {
 		name: "ts_web_search",
 		label: "Web Search",
 		description:
-			"Search the web with a headless browser across Google, DuckDuckGo and Bing. Each call fans out into at least 10 probes drawn from different strategies (verbatim, quoted, intent-shaped, site-scoped, recency, terminology) and merges the results, ranking them primarily by cross-engine corroboration. " +
+			"Search the web with a headless browser across Google and DuckDuckGo. Each call fans out into at least 10 probes drawn from different strategies (verbatim, quoted, intent-shaped, site-scoped, recency, terminology) and merges the results, ranking them primarily by cross-engine corroboration. " +
 			"No API keys required. Pass `query` for a single search or `queries` for several theme-related searches run together. " +
 			"The response always states the engine mix actually achieved; if an engine is blocked or returns unrelated results it is named and excluded rather than silently dropped. " +
 			"Use `depth: \"deep\"` when precision matters more than latency — it adds a second wave of probes plus page-2 results.",
 		promptSnippet:
-			"Search the web via headless browser (Google/DuckDuckGo/Bing). At least 10 probes per call; prefer {queries:[...]} with 2-4 related angles for research. Reports the engine mix actually achieved.",
+			"Search the web via headless browser (Google/DuckDuckGo). At least 10 probes per call; prefer {queries:[...]} with 2-4 related angles for research. Reports the engine mix actually achieved.",
 		promptGuidelines: [
 			"Use ts_web_search for web research questions instead of ts_fetch_content when you do not yet know the URL.",
 			"Prefer ts_web_search with {queries:[...]} containing 2-4 related angles over repeated single-query calls; each call already fans out internally, so repetition adds little.",
@@ -169,7 +169,7 @@ export default function (pi: ExtensionAPI) {
 			// Google is the scarce lane; skip it entirely when it is not trusted,
 			// so its quota is not wasted on guaranteed failures.
 			const probes = planned.map((probe) =>
-				trust.state === "trusted" ? probe : { ...probe, engines: (["duckduckgo", "bing"] as EngineId[]) },
+				trust.state === "trusted" ? probe : { ...probe, engines: (["duckduckgo"] as EngineId[]) },
 			);
 
 			const progress: string[] = [];
@@ -405,7 +405,7 @@ export default function (pi: ExtensionAPI) {
 				})),
 				documents,
 				probes: urls.length,
-				achieved: { google: 0, duckduckgo: 0, bing: 0 },
+				achieved: { google: 0, duckduckgo: 0 },
 				degraded: {},
 				mixSummary: "direct fetch",
 				intents: [],
@@ -554,7 +554,7 @@ function topHostsFrom(hits: RawHit[], count: number): string[] {
 		scores.set(host, (scores.get(host) ?? 0) + 1 / Math.log2(hit.position + 1));
 	}
 	return [...scores.entries()]
-		.filter(([host]) => !/(^|\.)(google|bing|duckduckgo)\./.test(host))
+		.filter(([host]) => !/(^|\.)(google|duckduckgo)\./.test(host))
 		.sort((a, b) => b[1] - a[1])
 		.slice(0, count)
 		.map(([host]) => host);

@@ -12,7 +12,6 @@
 
 import type { CdpSession } from "../browser/cdp.ts";
 import { ChromeManager } from "../browser/chrome.ts";
-import { bing } from "./bing.ts";
 import { duckduckgo } from "./duckduckgo.ts";
 import { google } from "./google.ts";
 import { allocate, DEFAULT_WEIGHTS, describeMix, type EngineWeights } from "./schedule.ts";
@@ -31,10 +30,9 @@ export interface EngineTuning {
 export const DEFAULT_TUNING: Record<EngineId, EngineTuning> = {
 	google: { concurrency: 2, minGapMs: 1800, jitterMs: 1400 },
 	duckduckgo: { concurrency: 3, minGapMs: 700, jitterMs: 600 },
-	bing: { concurrency: 3, minGapMs: 500, jitterMs: 500 },
 };
 
-const ADAPTERS: Record<EngineId, EngineAdapter> = { google, duckduckgo, bing };
+const ADAPTERS: Record<EngineId, EngineAdapter> = { google, duckduckgo };
 
 export interface WaveOptions {
 	chrome: ChromeManager;
@@ -257,9 +255,9 @@ export async function runWave(options: WaveOptions): Promise<WaveResult> {
 			const probe = probes.find((candidate) => candidate.id === outcome.probeId);
 			if (!probe) continue;
 			// Prefer the heaviest engine that has not already failed for this probe.
-			const fallback = (["duckduckgo", "bing", "google"] as EngineId[]).find(
+			const fallback = (["duckduckgo", "google"] as EngineId[]).find(
 				(engine) => engine !== outcome.engine && !degraded[engine] && engine !== "google",
-			) ?? (["duckduckgo", "bing"] as EngineId[]).find((engine) => engine !== outcome.engine && !degraded[engine]);
+			);
 			if (!fallback) continue;
 			substitutes.push({ engine: fallback, probe: { ...probe, engines: [fallback] } });
 			onProgress?.(`spillover: ${probe.label} → ${fallback}`);
@@ -286,7 +284,7 @@ export async function runWave(options: WaveOptions): Promise<WaveResult> {
 		);
 	}
 
-	const achieved: EngineWeights = { google: 0, duckduckgo: 0, bing: 0 };
+	const achieved: EngineWeights = { google: 0, duckduckgo: 0 };
 	const hits: RawHit[] = [];
 	for (const outcome of outcomes) {
 		if (outcome.status === "ok") {
@@ -296,7 +294,7 @@ export async function runWave(options: WaveOptions): Promise<WaveResult> {
 	}
 
 	// Structural success is not enough: an engine can return a complete,
-	// well-formed SERP of unrelated results (measured on Bing). Only content can
+	// well-formed SERP of unrelated results (measured on Bing, since removed). Only
 	// tell a real SERP from a decoy, so the gate runs before anything is returned.
 	const gated = applyRelevanceGate(outcomes, probes);
 	for (const [engine, reason] of Object.entries(gated.suspectEngines)) {

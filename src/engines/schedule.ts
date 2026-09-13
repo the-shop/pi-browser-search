@@ -1,7 +1,7 @@
 /**
  * Engine allocation.
  *
- * The owner's spec is a 70 / 20 / 10 Google / DuckDuckGo / Bing split. Two
+ * The configured split is Google 70 / DuckDuckGo 30. Two
  * properties matter for it to hold in practice:
  *
  *  1. **Exactly proportional, not sampled.** Random weighting would cluster —
@@ -9,7 +9,7 @@
  *     round-robin (the nginx algorithm), which is deterministic and spreads
  *     each engine evenly across the wave instead of bunching it.
  *  2. **Eligibility-aware.** Some probes can only run on some engines
- *     (`filetype:` is Google/Bing only). Constraints are honoured first, then
+ *     (`filetype:` is Google-only here). Constraints are honoured first, then
  *     the global mix is reported as *achieved* rather than assumed.
  */
 
@@ -17,10 +17,17 @@ import type { EngineId, Probe } from "./types.ts";
 
 export type EngineWeights = Record<EngineId, number>;
 
+/**
+ * Google 70 / DuckDuckGo 30.
+ *
+ * Bing held the remaining 10 points until it was removed: it answered with a
+ * complete, well-formed SERP of unrelated results (see the top-level README),
+ * so its share was being spent on output the relevance gate then discarded.
+ * DuckDuckGo takes the points rather than Google, which is the scarce lane.
+ */
 export const DEFAULT_WEIGHTS: EngineWeights = {
 	google: 70,
-	duckduckgo: 20,
-	bing: 10,
+	duckduckgo: 30,
 };
 
 export interface AllocationPlan {
@@ -60,7 +67,7 @@ export function apportion(total: number, weights: EngineWeights): EngineWeights 
 /**
  * Smooth weighted round-robin ordering over `count` slots.
  * Produces an evenly interleaved sequence, e.g. 70/20/10 over 10 slots yields
- * google, duckduckgo, google, bing, google, duckduckgo, google, google, ...
+ * google, duckduckgo, google, google, duckduckgo, google, google, duckduckgo, ...
  */
 export function smoothSequence(count: number, weights: EngineWeights): EngineId[] {
 	const engines = Object.keys(weights) as EngineId[];
@@ -96,7 +103,7 @@ export function eligibleEngines(probe: Probe, weights: EngineWeights): EngineId[
 export function allocate(probes: Probe[], weights: EngineWeights = DEFAULT_WEIGHTS): AllocationPlan {
 	const targets = apportion(probes.length, weights);
 	const assignments = new Map<string, EngineId>();
-	const achieved: EngineWeights = { google: 0, duckduckgo: 0, bing: 0 };
+	const achieved: EngineWeights = { google: 0, duckduckgo: 0 };
 
 	// Walk an ideal SWRR ordering, but only place a probe when the engine is
 	// eligible for it. This preserves the interleaving while respecting caps.
@@ -132,8 +139,8 @@ export function allocate(probes: Probe[], weights: EngineWeights = DEFAULT_WEIGH
 
 /** Fractional share of each engine in an achieved mix, for reporting. */
 export function describeMix(counts: EngineWeights): string {
-	const total = counts.google + counts.duckduckgo + counts.bing;
+	const total = counts.google + counts.duckduckgo;
 	if (total === 0) return "no probes run";
 	const pct = (n: number) => Math.round((n / total) * 100);
-	return `google ${counts.google}/${total} (${pct(counts.google)}%) · duckduckgo ${counts.duckduckgo}/${total} (${pct(counts.duckduckgo)}%) · bing ${counts.bing}/${total} (${pct(counts.bing)}%)`;
+	return `google ${counts.google}/${total} (${pct(counts.google)}%) · duckduckgo ${counts.duckduckgo}/${total} (${pct(counts.duckduckgo)}%)`;
 }
